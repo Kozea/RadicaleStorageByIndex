@@ -1,0 +1,4 @@
+.cache
+.eggs
+build
+perf/collections/
