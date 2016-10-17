@@ -1,4 +1,4 @@
-import os
+import re
 import shutil
 import tempfile
 from datetime import datetime, timezone
@@ -66,13 +66,12 @@ class TestStorageByIndex(TestCustomStorageSystem):
             '<C:calendar-query xmlns:C="urn:ietf:params:xml:ns:caldav">'
             '</C:calendar-query>')
 
-        # Hardcore parsing action
-        uid = answer.split('href')[1][1:-2].replace('/calendar.ics/', '')
+        uids = re.findall(r'<href>/calendar.ics/(.+)</href>', answer)
 
         index = list(self.db.list())
         assert len(index) == 1
         assert index[0] == (
-            uid,
+            uids[0],
             1,
             ts(datetime(2013, 9, 2, 16, 0, 0)),
             ts(datetime(2013, 9, 2, 17, 0, 0)),
@@ -166,3 +165,37 @@ class TestStorageByIndex(TestCustomStorageSystem):
         assert len(list(self.db.list())) == 5
 
         assert index == set(self.db.list())
+
+    def test_complex_report(self):
+        self.request("MKCOL", "/calendar.ics/")
+        assert len(list(self.db.list())) == 0
+        self.request(
+            "PUT", "/calendar.ics/", "BEGIN:VCALENDAR\r\nEND:VCALENDAR")
+        for i in range(1, 6):
+            e = 'event%d.ics' % i
+            event = get_file_content(e)
+            path = "/calendar.ics/%s" % e
+            status, headers, answer = self.request("PUT", path, event)
+            assert status == 201
+
+        status, headers, answer = self.request(
+            "REPORT", "/calendar.ics/",
+            '<?xml version="1.0" encoding="utf-8" ?>'
+            '<C:calendar-query xmlns:C="urn:ietf:params:xml:ns:caldav">'
+            '<C:filter>'
+            '   <C:comp-filter name="VCALENDAR">'
+            '     <C:comp-filter name="VEVENT">'
+            '       <C:prop-filter name="UID">'
+            '         <C:text-match>event</C:text-match>'
+            '       </C:prop-filter>'
+            '       <C:prop-filter name="SUMMARY">'
+            '         <C:text-match'
+            '            negate-condition="yes">Event4</C:text-match>'
+            '       </C:prop-filter>'
+            '     </C:comp-filter>'
+            '   </C:comp-filter>'
+            ' </C:filter>'
+            '</C:calendar-query>')
+
+        uids = re.findall(r'<href>/calendar.ics/(.+)</href>', answer)
+        assert uids == ['event1.ics', 'event2.ics', 'event3.ics', 'event5.ics']

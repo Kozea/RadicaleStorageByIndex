@@ -131,17 +131,23 @@ class Db(object):
 
     def search(self, **fields):
         fields = OrderedDict(fields)
-        comp = {
+
+        def get_comparator(name, value):
             # If the event finished before the start of the query,
             # There's a chance it will recur after
-            'dtstart': '<= dtend or recurrent',  # We don't index recurrences
+            if name == 'dtstart':
+                return '? <= dtend or recurrent'  # We don't index recurrences
             # If the event start after the end of the query we don't care
-            'dtend': '>= dtstart'
-        }
+            if name == 'dtend':
+                return '? >= dtstart'
+            comparator = ''
+            if isinstance(value, Not):
+                comparator = 'NOT '
+            fields[name] = '%%%s%%' % value
+            return comparator + '%s like ?' % name
+
         query = ') AND ('.join([
-            '? %s' % comp.get(
-                name, '%s= %s' % ('!' if isinstance(value, Not) else '', name)
-            ) for name, value in fields.items()
+            get_comparator(name, value) for name, value in fields.items()
         ])
 
         try:
