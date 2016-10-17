@@ -1,6 +1,6 @@
 # RadicaleStorageByIndex
 
-This is a storage extension for [Radicale](/Kozea/Radicale) that optimizes reporting using a sqlite index.
+This is a storage extension for [Radicale](https://github.com/Kozea/Radicale) that optimizes reporting using a sqlite index.
 
 ## Configuration
 
