@@ -18,47 +18,50 @@ class Not(str):
 class Db(object):
     __version__ = '1'
 
-    def __init__(self, folder, fields, file_name=".Radicale.index.db"):
+    def __init__(self, folder, fields, collection,
+                 file_name=".Radicale.index.db"):
         self._connection = None
         self.fields = fields
+        self.collection = collection
         self.db_path = os.path.join(folder, file_name)
 
     @property
     def connection(self):
         if not self._connection:
-            reindex = False
+            create = False
             if not os.path.exists(self.db_path):
-                reindex = True
+                create = True
                 os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
             self._connection = sqlite3.connect(self.db_path)
             if log.level <= INFO:
                 self._connection.set_trace_callback(log.info)
 
-            if not reindex:
+            if not create:
                 try:
                     self._connection.cursor().execute(
                         'SELECT href FROM by_index_events').fetchone()
                 except sqlite3.Error:
-                    reindex = True
-            if not reindex:
+                    create = True
+            if not create:
                 try:
                     version = self._connection.cursor().execute(
                         'SELECT version FROM by_index_version').fetchone()[0]
                 except sqlite3.Error:
                     version = None
-                reindex = version != self.__version__
-            if not reindex:
+                create = version != self.__version__
+            if not create:
                 try:
                     fields = self._connection.cursor().execute(
                         'SELECT field FROM by_index_fields').fetchall()
                 except sqlite3.Error:
                     raise
                     fields = None
-                reindex = set(fields) == set(self.fields)
+                create = set(fields) == set(self.fields)
 
-            if reindex:
+            if create:
                 self.create_database(self._connection)
-                self.reindex(self._connection)
+                if any(e for e in FileSystemCollection.list(self.collection)):
+                    self.reindex(self._connection)
         return self._connection
 
     @property
@@ -68,6 +71,10 @@ class Db(object):
     @property
     def columns(self):
         return ', '.join(self.fields)
+
+    @property
+    def columns_placeholder(self):
+        return ', '.join(['?' for _ in self.fields])
 
     def create_database(self, connection):
         log.info('Creating database %s' % self.db_path)
@@ -92,26 +99,32 @@ class Db(object):
 
     def reindex(self, connection):
         log.warn('Reindexing %s' % self.db_path)
-        # TODO REINDEXING
+        self.add_all([
+            self.collection.get_db_params(FileSystemCollection.get(
+                self.collection, href))
+            for href in FileSystemCollection.list(self.collection)
+        ])
 
     def upsert(self, href, recurrent, *fields):
         self.cursor.execute(
             'INSERT OR REPLACE INTO by_index_events (href, recurrent, %s) '
-            'VALUES (?, ?, %s)' % (self.columns, self.colums_placeholder),
+            'VALUES (?, ?, %s)' % (self.columns, self.columns_placeholder),
             (href, recurrent, *fields))
         self.connection.commit()
 
     def add_all(self, lines):
         self.cursor.executemany(
-            'INSERT INTO by_index_events (href, recurrent, %s) '
-            'VALUES (?, ?, %s)' % (self.columns, self.colums_placeholder),
+            'INSERT OR REPLACE INTO by_index_events (href, recurrent, %s) '
+            'VALUES (?, ?, %s)' % (self.columns, self.columns_placeholder),
             lines)
         self.connection.commit()
 
     def list(self):
         try:
             for result in self.cursor.execute(
-                    'SELECT href FROM by_index_events'):
+                'SELECT href, recurrent, %s FROM by_index_events' %
+                self.columns
+            ):
                 yield result
         finally:
             self.connection.rollback()
@@ -153,8 +166,9 @@ class Collection(FileSystemCollection):
         super().__init__(path, principal, folder)
         self.fields = list(
             map(lambda x: x.strip(), self.configuration.get(
-                'storage', 'radicale_storage_by_index_fields').split(',')))
-        self.db = Db(self._filesystem_path, self.fields)
+                'storage', 'radicale_storage_by_index_fields',
+                fallback='dtstart, dtend, uid').split(',')))
+        self.db = Db(self._filesystem_path, self.fields, self)
 
     def dt_to_timestamp(self, dt):
         if dt.tzinfo is None:
