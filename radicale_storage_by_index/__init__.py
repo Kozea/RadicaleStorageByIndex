@@ -8,7 +8,7 @@ from radicale.storage import Collection as FileSystemCollection
 from radicale.xmlutils import _tag
 
 log = getLogger('radicale.storage.by_index')
-log.setLevel(INFO)
+log.setLevel(getLogger('radicale').level)
 
 
 class Not(str):
@@ -45,7 +45,11 @@ class Db(object):
             if not create:
                 try:
                     version = self._connection.cursor().execute(
-                        'SELECT version FROM by_index_version').fetchone()[0]
+                        'SELECT version FROM by_index_version').fetchone()
+                    if version:
+                        version = version[0]
+                    else:
+                        version = None
                 except sqlite3.Error:
                     version = None
                 create = version != self.__version__
