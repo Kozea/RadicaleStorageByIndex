@@ -201,12 +201,12 @@ class Collection(FileSystemCollection):
                 key = filter_.get('name').lower().replace('-', '_')
                 request[key] = text
 
-    def pre_filtered_list(self, filters):
+    def get_all_filtered(self, filters):
         # Get request
         request = {}
         self._fill_request(filters, request)
         if not request:
-            return super().pre_filtered_list(filters)
+            return super().get_all_filtered(filters)
         if 'dtstart' in request:
             request['dtstart'] = self.dt_to_timestamp(
                 datetime.strptime(request['dtstart'], "%Y%m%dT%H%M%SZ"))
@@ -214,7 +214,7 @@ class Collection(FileSystemCollection):
             request['dtend'] = self.dt_to_timestamp(
                 datetime.strptime(request['dtend'], "%Y%m%dT%H%M%SZ"))
 
-        return [self.get(href) for href, in self.db.search(**request)]
+        return [(self.get(href), True) for href, in self.db.search(**request)]
 
     def get_db_params(self, item):
         if hasattr(item.item, 'vevent'):
