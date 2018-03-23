@@ -172,8 +172,8 @@ class Db(object):
 
 
 class Collection(FileSystemCollection):
-    def __init__(self, path, principal=False, folder=None):
-        super().__init__(path, principal, folder)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.fields = list(
             map(lambda x: x.strip(), self.configuration.get(
                 'storage', 'radicale_storage_by_index_fields',
