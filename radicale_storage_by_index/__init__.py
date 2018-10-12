@@ -103,11 +103,12 @@ class Db(object):
 
     def reindex(self, connection):
         log.warn('Reindexing %s' % self.db_path)
-        self.add_all([
-            self.collection.get_db_params(FileSystemCollection.get(
-                self.collection, href))
-            for href in FileSystemCollection.list(self.collection)
-        ])
+        params = []
+        for href in FileSystemCollection.list(self.collection):
+            item = FileSystemCollection.get(self.collection, href)
+            if item.name != 'VCARD':
+                params.append(item)
+        self.add_all(params)
 
     def upsert(self, href, recurrent, *fields):
         self.cursor.execute(
@@ -242,7 +243,7 @@ class Collection(FileSystemCollection):
 
     def upload(self, href, vobject_item):
         item = super().upload(href, vobject_item)
-        if item:
+        if item and item.name != 'VCARD':
             self.db.upsert(*self.get_db_params(item))
         return item
 
